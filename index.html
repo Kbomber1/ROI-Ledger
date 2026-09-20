@@ -32,6 +32,69 @@
   </div>
 </div>
 
+  <div id="editModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <button class="modal-close" id="editModalClose" aria-label="Close">✕</button>
+    <div class="modal-icon">✏️</div>
+    <h2>Edit Investment</h2>
+    <p class="modal-sub">Update the details and save.</p>
+
+    <div class="form-group">
+      <label>Name / counterparty</label>
+      <div class="input-wrap">
+        <input type="text" id="editName" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col form-group">
+        <label>Amount</label>
+        <div class="input-wrap">
+          <span class="input-prefix" id="editCurrencyPrefix">₦</span>
+          <input type="number" id="editAmount" step="any" inputmode="decimal">
+        </div>
+      </div>
+      <div class="col form-group">
+        <label>Currency</label>
+        <div class="input-wrap">
+          <select id="editCurrency">
+            <option value="₦">NGN ₦</option>
+            <option value="$">USD $</option>
+            <option value="€">EUR €</option>
+            <option value="£">GBP £</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col form-group">
+        <label>ROI</label>
+        <div class="input-wrap">
+          <input type="number" id="editRoi" step="any" inputmode="decimal">
+          <span class="input-suffix">%</span>
+        </div>
+      </div>
+      <div class="col form-group">
+        <label>Business days</label>
+        <div class="input-wrap">
+          <input type="number" id="editDays" step="1" inputmode="numeric">
+          <span class="input-suffix">days</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Start date</label>
+      <div class="input-wrap">
+        <input type="date" id="editStart">
+      </div>
+    </div>
+
+    <button type="button" id="editSaveBtn" class="btn-primary">Save changes</button>
+  </div>
+</div>
+  
 <div class="container">
 
   <!-- HEADER -->
