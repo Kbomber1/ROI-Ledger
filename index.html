@@ -1,4 +1,31 @@
 <!DOCTYPE html>
+<script>
+window.addEventListener('error', function(e) {
+  var d = document.getElementById('debug');
+  if (!d) {
+    d = document.createElement('div');
+    d.id = 'debug';
+    d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#800;color:#fff;font:11px monospace;padding:8px;z-index:9999;white-space:pre-wrap;max-height:40vh;overflow:auto;';
+    document.body.appendChild(d);
+  }
+  d.innerText += '❌ ' + e.message + ' (line ' + e.lineno + ')\n';
+});
+window.addEventListener('load', function() {
+  setTimeout(function() {
+    var d = document.getElementById('debug');
+    var info = 'LOADED\nsupabase: ' + (typeof window.supabase) + '\n';
+    if (!d) {
+      d = document.createElement('div');
+      d.id = 'debug';
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#060;color:#fff;font:11px monospace;padding:8px;z-index:9999;white-space:pre-wrap;max-height:40vh;overflow:auto;';
+      document.body.appendChild(d);
+    } else {
+      d.style.background = '#060';
+    }
+    d.innerText += info;
+  }, 2000);
+});
+</script>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
