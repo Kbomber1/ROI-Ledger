@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   const $ = (id) => document.getElementById(id);
 
+  let editingId = null;
+
   // ---------- TOAST ----------
   let toastTimer;
   function showToast(msg, type = '') {
@@ -24,11 +26,38 @@ document.addEventListener('DOMContentLoaded', () => {
     toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
   }
 
-  // ---------- CURRENCY PREFIX ----------
+  // ---------- HELPERS ----------
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function calculatePayDate(startDate, businessDays) {
+    let payDate = new Date(startDate);
+    let added = 0;
+    let calendarDays = 0;
+    while (added < businessDays) {
+      payDate.setDate(payDate.getDate() + 1);
+      calendarDays++;
+      const d = payDate.getDay();
+      if (d !== 0 && d !== 6) added++;
+    }
+    return { payDate, calendarDays };
+  }
+
+  // ---------- CURRENCY PREFIX (main) ----------
   const currencySelect = $('currencySelect');
   const currencyPrefix = $('currencyPrefix');
   currencySelect.addEventListener('change', () => {
     currencyPrefix.innerText = currencySelect.value;
+  });
+
+  // ---------- CURRENCY PREFIX (edit) ----------
+  const editCurrency = $('editCurrency');
+  const editCurrencyPrefix = $('editCurrencyPrefix');
+  editCurrency.addEventListener('change', () => {
+    editCurrencyPrefix.innerText = editCurrency.value;
   });
 
   // ---------- AUTH ----------
@@ -98,15 +127,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Wire auth modal — click + touchend for iOS
   $('modalClose').addEventListener('click', hideModal);
-
   const sendBtn = $('authSendBtn');
   let lastTap = 0;
   const handleSendTap = (e) => {
     e.preventDefault();
     const now = Date.now();
-    if (now - lastTap < 500) return; // debounce double-fire on iOS
+    if (now - lastTap < 500) return;
     lastTap = now;
     sendMagicLink();
   };
@@ -142,20 +169,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const startDate = new Date(startDateStr);
       const profit = costAmount * (roiPercent / 100);
       const payout = costAmount + profit;
-
-      let payDate = new Date(startDate);
-      let added = 0;
-      let calendarDays = 0;
-      while (added < businessDays) {
-        payDate.setDate(payDate.getDate() + 1);
-        calendarDays++;
-        const d = payDate.getDay();
-        if (d !== 0 && d !== 6) added++;
-      }
+      const { payDate, calendarDays } = calculatePayDate(startDate, businessDays);
 
       const fmt = (n) => currency + n.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
+        minimumFractionDigits: 2, maximumFractionDigits: 2
       });
 
       $('results').style.display = 'block';
@@ -166,12 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
       $('payDateVal').innerText = payDate.toLocaleDateString('en-US', {
         weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
       });
-      $('calSpanVal').innerText =
-        `${calendarDays} days (${businessDays} business)`;
+      $('calSpanVal').innerText = `${calendarDays} days (${businessDays} business)`;
 
       renderTimeline(startDate, payDate, businessDays);
 
-      // Save last calc for calendar
       window.__lastCalc = { itemName, payDate, payout, currency, profit };
 
       setTimeout(() => {
@@ -180,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const user = await getUser();
       if (!user) {
-        showToast('Sign in to save this record', '');
+        showToast('Sign in to save this record');
         return;
       }
 
@@ -211,10 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ---------- ADD TO CALENDAR ----------
   $('calendar-btn').addEventListener('click', () => {
     const d = window.__lastCalc;
-    if (!d) {
-      showToast('Calculate first', 'error');
-      return;
-    }
+    if (!d) { showToast('Calculate first', 'error'); return; }
 
     const pad = (n) => String(n).padStart(2, '0');
     const yyyy = d.payDate.getFullYear();
@@ -235,21 +247,17 @@ document.addEventListener('DOMContentLoaded', () => {
     window.open(url, '_blank');
   });
 
-  // ---------- TIMELINE RENDERER ----------
+  // ---------- TIMELINE ----------
   function renderTimeline(startDate, payDate, businessDays) {
     const container = $('timeline');
     container.innerHTML = '';
-
     let current = new Date(startDate);
     let bizCount = 0;
-
     while (current <= payDate) {
       const dot = document.createElement('div');
       dot.className = 'timeline-dot';
       const d = current.getDay();
-      const isWeekend = (d === 0 || d === 6);
-
-      if (isWeekend) {
+      if (d === 0 || d === 6) {
         dot.classList.add('weekend');
       } else {
         bizCount++;
@@ -262,7 +270,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ---------- HISTORY ----------
-  $('history-btn').addEventListener('click', async () => {
+  $('history-btn').addEventListener('click', loadHistory);
+
+  async function loadHistory() {
     try {
       const user = await getUser();
       if (!user) { showModal(); return; }
@@ -275,38 +285,143 @@ document.addEventListener('DOMContentLoaded', () => {
       const container = $('history-list');
 
       if (error) {
-        container.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div>' + error.message + '</div>';
+        container.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div>' + escapeHtml(error.message) + '</div>';
         return;
       }
 
       if (!data || !data.length) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <div class="icon">📊</div>
-            <div>No investments yet</div>
-            <div style="font-size:11px;margin-top:6px;">Your calculations will appear here.</div>
-          </div>`;
+        container.innerHTML =
+          '<div class="empty-state">' +
+            '<div class="icon">📊</div>' +
+            '<div>No investments yet</div>' +
+            '<div style="font-size:11px;margin-top:6px;">Your calculations will appear here.</div>' +
+          '</div>';
         return;
       }
 
-      container.innerHTML = data.map(r => `
-        <div class="history-item">
-          <div class="name">${escapeHtml(r.item_name)}</div>
-          <div class="payout">${r.currency}${Number(r.payout_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-          <div class="meta">Principal: ${r.currency}${Number(r.cost_amount).toLocaleString()}</div>
-          <div class="meta">Pay date: ${new Date(r.pay_date).toDateString()}</div>
-        </div>
-      `).join('');
+      let html = '';
+      data.forEach((r) => {
+        const payout = Number(r.payout_amount).toLocaleString(undefined, {
+          minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+        const principal = Number(r.cost_amount).toLocaleString();
+        html += '<div class="history-item">' +
+          '<div class="name">' + escapeHtml(r.item_name) + '</div>' +
+          '<div class="payout">' + r.currency + payout + '</div>' +
+          '<div class="meta">Principal: ' + r.currency + principal + '</div>' +
+          '<div class="meta">Pay date: ' + new Date(r.pay_date).toDateString() + '</div>' +
+          '<div class="history-actions">' +
+            '<button type="button" class="btn-edit" data-edit="' + r.id + '">✏️ Edit</button>' +
+            '<button type="button" class="btn-delete" data-delete="' + r.id + '">🗑 Delete</button>' +
+          '</div>' +
+        '</div>';
+      });
+      container.innerHTML = html;
+
+      container.querySelectorAll('[data-edit]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          openEditModal(btn.getAttribute('data-edit'), data);
+        });
+      });
+
+      container.querySelectorAll('[data-delete]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          deleteRecord(btn.getAttribute('data-delete'));
+        });
+      });
 
     } catch (err) {
       showToast('Error: ' + err.message, 'error');
     }
+  }
+
+  // ---------- EDIT MODAL ----------
+  function openEditModal(id, data) {
+    const r = data.find((x) => x.id === id);
+    if (!r) return;
+    editingId = id;
+
+    $('editName').value = r.item_name;
+    $('editAmount').value = r.cost_amount;
+    $('editRoi').value = r.roi_percent;
+    $('editDays').value = r.business_days;
+    $('editStart').value = r.start_date;
+    $('editCurrency').value = r.currency;
+    $('editCurrencyPrefix').innerText = r.currency;
+
+    $('editModal').classList.remove('hidden');
+  }
+
+  function closeEditModal() {
+    $('editModal').classList.add('hidden');
+    editingId = null;
+  }
+
+  $('editModalClose').addEventListener('click', closeEditModal);
+  $('editModal').addEventListener('click', (e) => {
+    if (e.target === $('editModal')) closeEditModal();
   });
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[c]));
+  $('editSaveBtn').addEventListener('click', async () => {
+    if (!editingId) return;
+
+    const itemName = $('editName').value.trim();
+    const costAmount = parseFloat($('editAmount').value);
+    const roiPercent = parseFloat($('editRoi').value);
+    const businessDays = parseInt($('editDays').value);
+    const currency = $('editCurrency').value;
+    const startDateStr = $('editStart').value;
+
+    if (!itemName || !costAmount || !roiPercent || !businessDays || !startDateStr) {
+      showToast('Fill in all fields', 'error');
+      return;
+    }
+
+    const startDate = new Date(startDateStr);
+    const profit = costAmount * (roiPercent / 100);
+    const payout = costAmount + profit;
+    const { payDate } = calculatePayDate(startDate, businessDays);
+
+    $('editSaveBtn').disabled = true;
+    $('editSaveBtn').innerText = 'Saving…';
+
+    const { error } = await supabase
+      .from('investments')
+      .update({
+        item_name: itemName,
+        cost_amount: costAmount,
+        roi_percent: roiPercent,
+        business_days: businessDays,
+        start_date: startDate.toISOString().split('T')[0],
+        pay_date: payDate.toISOString().split('T')[0],
+        payout_amount: payout,
+        currency: currency
+      })
+      .eq('id', editingId);
+
+    $('editSaveBtn').disabled = false;
+    $('editSaveBtn').innerText = 'Save changes';
+
+    if (error) {
+      showToast('Update error: ' + error.message, 'error');
+      return;
+    }
+
+    showToast('Updated ✓', 'success');
+    closeEditModal();
+    loadHistory();
+  });
+
+  // ---------- DELETE ----------
+  async function deleteRecord(id) {
+    if (!confirm('Delete this investment? This cannot be undone.')) return;
+    const { error } = await supabase.from('investments').delete().eq('id', id);
+    if (error) {
+      showToast('Delete error: ' + error.message, 'error');
+      return;
+    }
+    showToast('Deleted', 'success');
+    loadHistory();
   }
 
 });
